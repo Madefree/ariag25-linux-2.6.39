@@ -181,7 +181,7 @@ static struct platform_device *at91sam9x5ek_snd_device;
 
 static int __init at91sam9x5ek_init(void)
 {
-    struct clk *pllb;
+    struct clk *plla;
 	int ret;
 
 	if (!machine_is_at91sam9x5ek())
@@ -203,14 +203,14 @@ static int __init at91sam9x5ek_init(void)
 		goto err;
 	}
 
-	pllb = clk_get(NULL, "pllb");
-	if (IS_ERR(pllb)) {
-		printk(KERN_ERR "ASoC: Failed to get PLLB\n");
-		ret = PTR_ERR(pllb);
+	plla = clk_get(NULL, "plla");
+	if (IS_ERR(plla)) {
+		printk(KERN_ERR "ASoC: Failed to get PLLA\n");
+		ret = PTR_ERR(plla);
 		goto err_mclk;
 	}
-	ret = clk_set_parent(mclk, pllb);
-	clk_put(pllb);
+	ret = clk_set_parent(mclk, plla);
+	clk_put(plla);
 	if (ret != 0) {
 		printk(KERN_ERR "ASoC: Failed to set MCLK parent\n");
 		goto err_mclk;
