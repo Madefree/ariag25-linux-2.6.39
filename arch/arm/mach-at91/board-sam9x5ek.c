@@ -229,7 +229,10 @@ static void __init ek_board_init(void)
 		at91_add_device_i2c(0,
 				ek_i2c_devices, ARRAY_SIZE(ek_i2c_devices));
 
-	/* SSC (for WM8731) */
+    /* PCK0 provides MCLK for WM8731 */
+	at91_set_C_periph(AT91_PIN_PC15, 0);
+
+	/* SSC for WM8731 */
 	at91_add_device_ssc(AT91SAM9X5_ID_SSC, ATMEL_SSC_TX | ATMEL_SSC_RX);
 
 	/* Add 1-wire bus */

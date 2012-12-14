@@ -34,7 +34,12 @@
 #include "atmel-pcm.h"
 #include "atmel_ssc_dai.h"
 
-#define MCLK_RATE 12288000
+#define MCLK_RATE 12000000
+
+#define ENABLE_MIC_INPUT
+#define ENABLE_LINE_IN
+
+static struct clk *mclk;
 
 static int at91sam9x5ek_hw_params(struct snd_pcm_substream *substream,
 	struct snd_pcm_hw_params *params)
@@ -56,14 +61,6 @@ static int at91sam9x5ek_hw_params(struct snd_pcm_substream *substream,
 	if (ret < 0)
 		return ret;
 
-	/* set the codec system clock for DAC and ADC */
-	ret = snd_soc_dai_set_sysclk(codec_dai, WM8731_SYSCLK_XTAL,
-		MCLK_RATE, SND_SOC_CLOCK_IN);
-	if (ret < 0) {
-		printk(KERN_ERR "ASoC: Failed to set WM8731 SYSCLK: %d\n", ret);
-		return ret;
-	}
-
 	return 0;
 }
 
@@ -71,27 +68,45 @@ static struct snd_soc_ops at91sam9x5ek_ops = {
 	.hw_params = at91sam9x5ek_hw_params,
 };
 
-/*
- * Audio paths on at91sam9x5ek board:
- *
- *  |A| ------------> |      | ---R----> Headphone Jack
- *  |T| <----\        |  WM  | ---L--/
- *  |9| ---> CLK <--> | 8751 | <--R----- Line In Jack
- *  |1| <------------ |      | <--L--/
- */
+static int at91sam9g20ek_set_bias_level(struct snd_soc_card *card,
+					enum snd_soc_bias_level level)
+{
+	static int mclk_on;
+	int ret = 0;
+
+	switch (level) {
+	case SND_SOC_BIAS_ON:
+	case SND_SOC_BIAS_PREPARE:
+		if (!mclk_on)
+			ret = clk_enable(mclk);
+		if (ret == 0)
+			mclk_on = 1;
+		break;
+
+	case SND_SOC_BIAS_OFF:
+	case SND_SOC_BIAS_STANDBY:
+		if (mclk_on)
+			clk_disable(mclk);
+		mclk_on = 0;
+		break;
+	}
+
+	return ret;
+}
+
 static const struct snd_soc_dapm_widget at91sam9x5ek_dapm_widgets[] = {
-	SND_SOC_DAPM_HP("Headphone Jack", NULL),
-	SND_SOC_DAPM_LINE("Line In Jack", NULL),
+	SND_SOC_DAPM_MIC("Int Mic", NULL),
+	SND_SOC_DAPM_SPK("Ext Spk", NULL),
 };
 
 static const struct snd_soc_dapm_route intercon[] = {
-	/* headphone jack connected to HPOUT */
-	{"Headphone Jack", NULL, "RHPOUT"},
-	{"Headphone Jack", NULL, "LHPOUT"},
 
-	/* line in jack connected LINEIN */
-	{"LLINEIN", NULL, "Line In Jack"},
-	{"RLINEIN", NULL, "Line In Jack"},
+	/* speaker connected to LHPOUT */
+	{"Ext Spk", NULL, "LHPOUT"},
+
+	/* mic is connected to Mic Jack, with WM8731 Mic Bias */
+	{"MICIN", NULL, "Mic Bias"},
+	{"Mic Bias", NULL, "Int Mic"},
 };
 
 /*
@@ -102,50 +117,45 @@ static int at91sam9x5ek_wm8731_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_codec *codec = rtd->codec;
 	struct snd_soc_dai *codec_dai = rtd->codec_dai;
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
+	int ret;
 
 	printk(KERN_DEBUG
 			"ASoC: at91sam9x5_wm8731"
 			": at91sam9x5ek_wm8731_init() called\n");
 
-	/* remove some not supported rates in relation with clock
-	 * provided to the wm8731 codec */
-	switch (MCLK_RATE) {
-	case 12288000:
-		codec_dai->driver->playback.rates &= SNDRV_PCM_RATE_8000 |
-						     SNDRV_PCM_RATE_32000 |
-						     SNDRV_PCM_RATE_48000 |
-						     SNDRV_PCM_RATE_96000;
-		codec_dai->driver->capture.rates &= SNDRV_PCM_RATE_8000 |
-						    SNDRV_PCM_RATE_32000 |
-						    SNDRV_PCM_RATE_48000 |
-						    SNDRV_PCM_RATE_96000;
-		break;
-	case 12000000:
-		/* all wm8731 rates supported */
-		break;
-	default:
-		printk(KERN_ERR "ASoC: Codec Master clock rate not defined\n");
-		return -EINVAL;
+	ret = snd_soc_dai_set_sysclk(codec_dai, WM8731_SYSCLK_MCLK,
+		MCLK_RATE, SND_SOC_CLOCK_IN);
+	if (ret < 0) {
+		printk(KERN_ERR "Failed to set WM8731 SYSCLK: %d\n", ret);
+		return ret;
 	}
 
-	/* set not connected pins */
-	snd_soc_dapm_nc_pin(dapm, "Mic Bias");
-	snd_soc_dapm_nc_pin(dapm, "MICIN");
-	snd_soc_dapm_nc_pin(dapm, "LOUT");
-	snd_soc_dapm_nc_pin(dapm, "ROUT");
-
-	/* add specific widgets */
+	/* Add specific widgets */
 	snd_soc_dapm_new_controls(dapm, at91sam9x5ek_dapm_widgets,
 				  ARRAY_SIZE(at91sam9x5ek_dapm_widgets));
-	/* set up specific audio path interconnects */
+	/* Set up specific audio path interconnects */
 	snd_soc_dapm_add_routes(dapm, intercon, ARRAY_SIZE(intercon));
 
-	/* always connected */
-	snd_soc_dapm_enable_pin(dapm, "Headphone Jack");
-	snd_soc_dapm_enable_pin(dapm, "Line In Jack");
+    /* Set connections */
+#ifdef ENABLE_LINE_IN
+	snd_soc_dapm_enable_pin(dapm, "RLINEIN");
+	snd_soc_dapm_enable_pin(dapm, "LLINEIN");
+#else
+ 	snd_soc_dapm_nc_pin(dapm, "RLINEIN");
+ 	snd_soc_dapm_nc_pin(dapm, "LLINEIN");
+#endif
 
-	/* signal a DAPM event */
+#ifdef ENABLE_MIC_INPUT
+	snd_soc_dapm_enable_pin(dapm, "Int Mic");
+#else
+	snd_soc_dapm_nc_pin(dapm, "Int Mic");
+#endif
+
+	/* always connected */
+	snd_soc_dapm_enable_pin(dapm, "Ext Spk");
+
 	snd_soc_dapm_sync(dapm);
+
 	return 0;
 }
 
@@ -164,12 +174,14 @@ static struct snd_soc_card snd_soc_at91sam9x5ek = {
 	.name = "AT91SAM9X5",
 	.dai_link = &at91sam9x5ek_dai,
 	.num_links = 1,
+	.set_bias_level = at91sam9g20ek_set_bias_level,
 };
 
 static struct platform_device *at91sam9x5ek_snd_device;
 
 static int __init at91sam9x5ek_init(void)
 {
+    struct clk *pllb;
 	int ret;
 
 	if (!machine_is_at91sam9x5ek())
@@ -178,14 +190,39 @@ static int __init at91sam9x5ek_init(void)
 	ret = atmel_ssc_set_audio(0);
 	if (ret != 0) {
 		pr_err("ASoC: Failed to set SSC 0 for audio: %d\n", ret);
+		return ret;
+	}
+	
+	/*
+	 * Codec MCLK is supplied by PCK0 - set it up.
+	 */
+	mclk = clk_get(NULL, "pck0");
+	if (IS_ERR(mclk)) {
+		printk(KERN_ERR "ASoC: Failed to get MCLK\n");
+		ret = PTR_ERR(mclk);
 		goto err;
 	}
+
+	pllb = clk_get(NULL, "pllb");
+	if (IS_ERR(pllb)) {
+		printk(KERN_ERR "ASoC: Failed to get PLLB\n");
+		ret = PTR_ERR(pllb);
+		goto err_mclk;
+	}
+	ret = clk_set_parent(mclk, pllb);
+	clk_put(pllb);
+	if (ret != 0) {
+		printk(KERN_ERR "ASoC: Failed to set MCLK parent\n");
+		goto err_mclk;
+	}
+
+	clk_set_rate(mclk, MCLK_RATE);
 
 	at91sam9x5ek_snd_device = platform_device_alloc("soc-audio", -1);
 	if (!at91sam9x5ek_snd_device) {
 		printk(KERN_ERR "ASoC: Platform device allocation failed\n");
 		ret = -ENOMEM;
-		goto err;
+		goto err_mclk;
 	}
 
 	platform_set_drvdata(at91sam9x5ek_snd_device,
@@ -203,6 +240,9 @@ static int __init at91sam9x5ek_init(void)
 
 err_device_add:
 	platform_device_put(at91sam9x5ek_snd_device);
+err_mclk:
+	clk_put(mclk);
+	mclk = NULL;
 err:
 	return ret;
 }
@@ -211,6 +251,8 @@ static void __exit at91sam9x5ek_exit(void)
 {
 	platform_device_unregister(at91sam9x5ek_snd_device);
 	at91sam9x5ek_snd_device = NULL;
+	clk_put(mclk);
+	mclk = NULL;
 }
 
 module_init(at91sam9x5ek_init);
