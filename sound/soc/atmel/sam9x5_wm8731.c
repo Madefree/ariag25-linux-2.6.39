@@ -68,7 +68,7 @@ static struct snd_soc_ops at91sam9x5ek_ops = {
 	.hw_params = at91sam9x5ek_hw_params,
 };
 
-static int at91sam9g20ek_set_bias_level(struct snd_soc_card *card,
+static int at91sam9x5ek_set_bias_level(struct snd_soc_card *card,
 					enum snd_soc_bias_level level)
 {
 	static int mclk_on;
@@ -79,6 +79,7 @@ static int at91sam9g20ek_set_bias_level(struct snd_soc_card *card,
 	case SND_SOC_BIAS_PREPARE:
 		if (!mclk_on)
 			ret = clk_enable(mclk);
+			printk(KERN_INFO "ASoC: CLK ENABLE!!\n");
 		if (ret == 0)
 			mclk_on = 1;
 		break;
@@ -119,16 +120,17 @@ static int at91sam9x5ek_wm8731_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	int ret;
 
-	printk(KERN_DEBUG
+	printk(KERN_INFO
 			"ASoC: at91sam9x5_wm8731"
 			": at91sam9x5ek_wm8731_init() called\n");
 
 	ret = snd_soc_dai_set_sysclk(codec_dai, WM8731_SYSCLK_MCLK,
 		MCLK_RATE, SND_SOC_CLOCK_IN);
 	if (ret < 0) {
-		printk(KERN_ERR "Failed to set WM8731 SYSCLK: %d\n", ret);
+		printk(KERN_ERR "Failed to set WM8731 MCLK: %d\n", ret);
 		return ret;
 	}
+	else printk(KERN_INFO "ASoC: set WM8731 MCLK\n");
 
 	/* Add specific widgets */
 	snd_soc_dapm_new_controls(dapm, at91sam9x5ek_dapm_widgets,
@@ -174,7 +176,7 @@ static struct snd_soc_card snd_soc_at91sam9x5ek = {
 	.name = "AT91SAM9X5",
 	.dai_link = &at91sam9x5ek_dai,
 	.num_links = 1,
-	.set_bias_level = at91sam9g20ek_set_bias_level,
+	.set_bias_level = at91sam9x5ek_set_bias_level,
 };
 
 static struct platform_device *at91sam9x5ek_snd_device;
@@ -192,6 +194,7 @@ static int __init at91sam9x5ek_init(void)
 		pr_err("ASoC: Failed to set SSC 0 for audio: %d\n", ret);
 		return ret;
 	}
+	else printk(KERN_INFO "ASoC: set SSC 0 for audio\n");
 	
 	/*
 	 * Codec MCLK is supplied by PCK0 - set it up.
@@ -202,6 +205,7 @@ static int __init at91sam9x5ek_init(void)
 		ret = PTR_ERR(mclk);
 		goto err;
 	}
+	else printk(KERN_INFO "ASoC: get MCLK\n"); 
 
 	plla = clk_get(NULL, "plla");
 	if (IS_ERR(plla)) {
@@ -209,12 +213,15 @@ static int __init at91sam9x5ek_init(void)
 		ret = PTR_ERR(plla);
 		goto err_mclk;
 	}
+	else printk(KERN_INFO "ASoC: get PLLA\n");
+	
 	ret = clk_set_parent(mclk, plla);
 	clk_put(plla);
 	if (ret != 0) {
 		printk(KERN_ERR "ASoC: Failed to set MCLK parent\n");
 		goto err_mclk;
 	}
+	else printk(KERN_INFO "ASoC: set MCLK parent\n");
 
 	clk_set_rate(mclk, MCLK_RATE);
 
@@ -224,6 +231,7 @@ static int __init at91sam9x5ek_init(void)
 		ret = -ENOMEM;
 		goto err_mclk;
 	}
+	else printk(KERN_INFO "ASoC: Platform device allocation\n");
 
 	platform_set_drvdata(at91sam9x5ek_snd_device,
 			&snd_soc_at91sam9x5ek);
@@ -233,6 +241,7 @@ static int __init at91sam9x5ek_init(void)
 		printk(KERN_ERR "ASoC: Platform device allocation failed\n");
 		goto err_device_add;
 	}
+	else printk(KERN_INFO "ASoC: Platform device add\n");
 
 	printk(KERN_INFO "ASoC: at91sam9x5ek_init ok\n");
 
