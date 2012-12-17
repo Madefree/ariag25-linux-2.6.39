@@ -25,10 +25,6 @@
 #include <linux/delay.h>
 #include <mach/cpu.h>
 
-#include <video/atmel_lcdfb.h>
-#include <media/soc_camera.h>
-#include <media/atmel-isi.h>
-
 #include <asm/setup.h>
 #include <asm/mach-types.h>
 #include <asm/irq.h>
@@ -50,6 +46,8 @@
 
 #include <linux/w1-gpio.h>
 
+#define AUDIO_TX	(ATMEL_SSC_TK | ATMEL_SSC_TF | ATMEL_SSC_TD)
+#define AUDIO_RX	(ATMEL_SSC_RF | ATMEL_SSC_RD)
 
 static void __init ek_map_io(void)
 {
@@ -233,7 +231,7 @@ static void __init ek_board_init(void)
 	at91_set_C_periph(AT91_PIN_PC15, 0);
 
 	/* SSC for WM8731 */
-	at91_add_device_ssc(AT91SAM9X5_ID_SSC, ATMEL_SSC_TX | ATMEL_SSC_RX);
+	at91_add_device_ssc(AT91SAM9X5_ID_SSC, AUDIO_TX | AUDIO_RX);
 
 	/* Add 1-wire bus */
 	at91_add_device_w1();
