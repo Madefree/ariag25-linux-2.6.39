@@ -34,7 +34,7 @@
 #include "atmel-pcm.h"
 #include "atmel_ssc_dai.h"
 
-#define MCLK_RATE 12288000
+#define MCLK_RATE 12000000
 
 static int at91sam9x5ek_hw_params(struct snd_pcm_substream *substream,
 	struct snd_pcm_hw_params *params)
