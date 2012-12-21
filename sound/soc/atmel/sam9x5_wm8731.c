@@ -36,6 +36,9 @@
 
 #define MCLK_RATE 12000000
 
+#define ENABLE_MIC_INPUT
+#undef ENABLE_LINE_OUTPUT
+
 static int at91sam9x5ek_hw_params(struct snd_pcm_substream *substream,
 	struct snd_pcm_hw_params *params)
 {
@@ -82,6 +85,7 @@ static struct snd_soc_ops at91sam9x5ek_ops = {
 static const struct snd_soc_dapm_widget at91sam9x5ek_dapm_widgets[] = {
 	SND_SOC_DAPM_HP("Headphone Jack", NULL),
 	SND_SOC_DAPM_LINE("Line In Jack", NULL),
+	SND_SOC_DAPM_MIC("Int Mic", NULL),
 };
 
 static const struct snd_soc_dapm_route intercon[] = {
@@ -92,6 +96,10 @@ static const struct snd_soc_dapm_route intercon[] = {
 	/* line in jack connected LINEIN */
 	{"LLINEIN", NULL, "Line In Jack"},
 	{"RLINEIN", NULL, "Line In Jack"},
+
+	/* mic connected to MICIN with BIAS */
+	{"MICIN", NULL, "Mic Bias"},
+    {"Mic Bias", NULL, "Int Mic"},
 };
 
 /*
@@ -128,11 +136,16 @@ static int at91sam9x5ek_wm8731_init(struct snd_soc_pcm_runtime *rtd)
 		return -EINVAL;
 	}
 
-	/* set not connected pins */
+	/* set connected pins */
+#ifndef ENABLE_MIC_INPUT
 	snd_soc_dapm_nc_pin(dapm, "Mic Bias");
 	snd_soc_dapm_nc_pin(dapm, "MICIN");
+#endif
+
+#ifndef ENABLE_LINE_OUTPUT
 	snd_soc_dapm_nc_pin(dapm, "LOUT");
 	snd_soc_dapm_nc_pin(dapm, "ROUT");
+#endif
 
 	/* add specific widgets */
 	snd_soc_dapm_new_controls(dapm, at91sam9x5ek_dapm_widgets,
@@ -143,6 +156,7 @@ static int at91sam9x5ek_wm8731_init(struct snd_soc_pcm_runtime *rtd)
 	/* always connected */
 	snd_soc_dapm_enable_pin(dapm, "Headphone Jack");
 	snd_soc_dapm_enable_pin(dapm, "Line In Jack");
+	snd_soc_dapm_enable_pin(dapm, "Int Mic");
 
 	/* signal a DAPM event */
 	snd_soc_dapm_sync(dapm);
