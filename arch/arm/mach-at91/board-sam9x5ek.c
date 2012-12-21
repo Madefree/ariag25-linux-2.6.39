@@ -148,6 +148,15 @@ static struct mci_platform_data __initdata mci1_data = {
 };
 */
 
+/*
+ * I2C Devices
+ */
+static struct i2c_board_info __initdata ek_i2c_devices[] = {
+	{
+		I2C_BOARD_INFO("wm8731", 0x1b)
+	},
+};
+
 static struct spi_board_info ariag25_spi_devices[] = {
     {
         .modalias    = "spidev",
@@ -215,7 +224,15 @@ static void __init ek_board_init(void)
 
 	/* Add 1-wire bus */
 	at91_add_device_w1();
+	
+	/* I2C */
+	if (cm_config & CM_CONFIG_I2C0_ENABLE)
+		i2c_register_board_info(0, ek_i2c_devices, ARRAY_SIZE(ek_i2c_devices));
+	else
+		at91_add_device_i2c(0, ek_i2c_devices, ARRAY_SIZE(ek_i2c_devices));
 
+	/* SSC (for WM8731) */
+	at91_add_device_ssc(AT91SAM9X5_ID_SSC, ATMEL_SSC_TX | ATMEL_SSC_RX);
 }
 
 MACHINE_START(AT91SAM9X5EK, "Acme Systems Aria G25")
